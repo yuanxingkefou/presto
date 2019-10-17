@@ -138,6 +138,7 @@
         <module>presto-proxy</module>
         <module>presto-kudu</module>
         <module>presto-elasticsearch</module>
+        <module>presto-mysqltwo</module>
     </modules>
 
     <dependencyManagement>
@@ -293,6 +294,12 @@
             <dependency>
                 <groupId>com.facebook.presto</groupId>
                 <artifactId>presto-mysql</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.facebook.presto</groupId>
+                <artifactId>presto-mysqltwo</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

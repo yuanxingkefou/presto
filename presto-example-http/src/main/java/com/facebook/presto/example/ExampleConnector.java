@@ -59,18 +59,21 @@ public class ExampleConnector
     @Override
     public ConnectorMetadata getMetadata(ConnectorTransactionHandle transactionHandle)
     {
+        //返回元数据管理类
         return metadata;
     }
 
     @Override
     public ConnectorSplitManager getSplitManager()
     {
+        //返回split管理类
         return splitManager;
     }
 
     @Override
     public ConnectorRecordSetProvider getRecordSetProvider()
     {
+        //返回数据读取类
         return recordSetProvider;
     }
 

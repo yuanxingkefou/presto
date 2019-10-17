@@ -26,6 +26,9 @@ import java.util.Map;
 import static com.google.common.base.Throwables.throwIfUnchecked;
 import static java.util.Objects.requireNonNull;
 
+/**
+ * Connector工厂，使用create方法来实例化connector
+ */
 public class ExampleConnectorFactory
         implements ConnectorFactory
 {

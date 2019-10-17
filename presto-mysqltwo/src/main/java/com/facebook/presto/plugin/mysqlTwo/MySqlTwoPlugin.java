@@ -11,21 +11,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.example;
+package com.facebook.presto.plugin.mysqlTwo;
 
-import com.facebook.presto.spi.Plugin;
-import com.facebook.presto.spi.connector.ConnectorFactory;
-import com.google.common.collect.ImmutableList;
+import com.facebook.presto.plugin.jdbc.JdbcPlugin;
 
-/**
- * 注册Plugin
- */
-public class ExamplePlugin
-        implements Plugin
+public class MySqlTwoPlugin
+        extends JdbcPlugin
 {
-    @Override
-    public Iterable<ConnectorFactory> getConnectorFactories()
+    public MySqlTwoPlugin()
     {
-        return ImmutableList.of(new ExampleConnectorFactory());
+        super("mysqltwo", new MySqlTwoClientModule());
     }
 }

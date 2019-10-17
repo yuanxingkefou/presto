@@ -67,18 +67,31 @@ public class ExampleRecordCursor
         }
     }
 
+    /**
+     * 获取已经读取完成的字节
+     * @return
+     */
     @Override
     public long getCompletedBytes()
     {
         return totalBytes;
     }
 
+    /**
+     * 获取数据读取时长
+     * @return
+     */
     @Override
     public long getReadTimeNanos()
     {
         return 0;
     }
 
+    /**
+     * 获取指定字段的数据类型
+     * @param field
+     * @return
+     */
     @Override
     public Type getType(int field)
     {
@@ -86,6 +99,10 @@ public class ExampleRecordCursor
         return columnHandles.get(field).getColumnType();
     }
 
+    /**
+     * 判断当前split是否还有下一行数据
+     * @return
+     */
     @Override
     public boolean advanceNextPosition()
     {

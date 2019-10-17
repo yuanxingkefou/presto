@@ -113,6 +113,10 @@
             <outputDirectory>plugin/mysql</outputDirectory>
         </fileSet>
         <fileSet>
+            <directory>${project.build.directory}/dependency/presto-mysqltwo-${project.version}</directory>
+            <outputDirectory>plugin/mysqltwo</outputDirectory>
+        </fileSet>
+        <fileSet>
             <directory>${project.build.directory}/dependency/presto-postgresql-${project.version}</directory>
             <outputDirectory>plugin/postgresql</outputDirectory>
         </fileSet>

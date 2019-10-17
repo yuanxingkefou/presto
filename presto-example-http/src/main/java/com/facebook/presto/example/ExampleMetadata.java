@@ -40,6 +40,10 @@ import java.util.Set;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
+/**
+ * 实现了ConnectorMetadata接口，提供了对数据源元数据的管理和各种操作，例如列举Schemas,Tables,Columns信息，创建表
+ * 添加分区等
+ */
 public class ExampleMetadata
         implements ConnectorMetadata
 {
@@ -60,11 +64,22 @@ public class ExampleMetadata
         return listSchemaNames();
     }
 
+    /**
+     * 列举当前Catalog下的schema列表
+     * @return
+     */
     public List<String> listSchemaNames()
     {
         return ImmutableList.copyOf(exampleClient.getSchemaNames());
     }
 
+    /**
+     * 获取SQL中的表实例
+     * ExampleTableHandle实现了spi包中的ConnectorTableHandle接口，在获取分片和表字段的信息时需要用到该实例
+     * @param session
+     * @param tableName
+     * @return
+     */
     @Override
     public ExampleTableHandle getTableHandle(ConnectorSession session, SchemaTableName tableName)
     {
@@ -94,6 +109,12 @@ public class ExampleMetadata
         return new ConnectorTableLayout(handle);
     }
 
+    /**
+     * 获取表的元数据信息，主要包括表字段信息，所在的Schema，Owner等
+     * @param session
+     * @param table
+     * @return
+     */
     @Override
     public ConnectorTableMetadata getTableMetadata(ConnectorSession session, ConnectorTableHandle table)
     {
@@ -124,6 +145,12 @@ public class ExampleMetadata
         return builder.build();
     }
 
+    /**
+     * 获取表的列信息
+     * @param session
+     * @param tableHandle
+     * @return
+     */
     @Override
     public Map<String, ColumnHandle> getColumnHandles(ConnectorSession session, ConnectorTableHandle tableHandle)
     {
@@ -144,6 +171,12 @@ public class ExampleMetadata
         return columnHandles.build();
     }
 
+    /**
+     * 获取当前schema下所有表的Column元数据信息
+     * @param session
+     * @param prefix
+     * @return
+     */
     @Override
     public Map<SchemaTableName, List<ColumnMetadata>> listTableColumns(ConnectorSession session, SchemaTablePrefix prefix)
     {
