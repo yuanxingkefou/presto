@@ -138,6 +138,8 @@
         <module>presto-proxy</module>
         <module>presto-kudu</module>
         <module>presto-elasticsearch</module>
+        <module>presto-hash-demo</module>
+        <module>hashDemo</module>
     </modules>
 
     <dependencyManagement>
