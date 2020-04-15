@@ -98,20 +98,21 @@ public class GeneratePages
         return page;
     }
 
-    public static List<List<Page>> generatePartitions(int concurrency)
+    public static List<List<Page>> generatePartitions(int concurrency,int pages)
     {
         List<List<Page>> partitions = new ArrayList<>(concurrency);
         HashGenerator hashGenerator = new InterpretedHashGenerator(ImmutableList.of(BIGINT), new int[] {0});
         PartitionFunction partitionFunction = new LocalPartitionGenerator(hashGenerator, concurrency);
         IntArrayList[] partitionAssignments = new IntArrayList[concurrency];
 
-        for (int i = 0; i < concurrency; i++) {
-            partitionAssignments[i] = new IntArrayList();
-            partitions.add(new ArrayList<>());
-        }
 
-        for (int num = 0; num < 1; num++) {
+        for (int num = 0; num < pages; num++) {
             Page page = generateSourceData(100);
+
+            for (int i = 0; i < concurrency; i++) {
+                partitionAssignments[i] = new IntArrayList();
+                partitions.add(new ArrayList<>());
+            }
 
             for (int position = 0; position < page.getPositionCount(); position++) {
                 int partition = partitionFunction.getPartition(page, position);
@@ -127,7 +128,7 @@ public class GeneratePages
                     }
 
                     Page pageSplit = new Page(positions.size(), outputBlocks);
-                    System.out.println(partition+":"+pageSplit.toString());
+                    System.out.println(partition+(concurrency*num)+":"+pageSplit.toString());
                     showPage(pageSplit);
                     partitions.get(partition).add(pageSplit);
                 }

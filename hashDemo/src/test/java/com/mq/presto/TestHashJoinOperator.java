@@ -85,13 +85,15 @@ public class TestHashJoinOperator
     private List<Driver> leftDrivers = new ArrayList<>(concurrency);
     private List<Driver> rightDrivers = new ArrayList<>(concurrency);
 
+    private List<HashBuilderOperator> hashBuilderOperators=new ArrayList<>(concurrency);
+
     private ValuesOperator leftValuesOperator;
     private ValuesOperator rightValuesOperator;
 
     private static final SingleStreamSpillerFactory SINGLE_STREAM_SPILLER_FACTORY = new DummySpillerFactory();
     private static final PartitioningSpillerFactory PARTITIONING_SPILLER_FACTORY = new GenericPartitioningSpillerFactory(SINGLE_STREAM_SPILLER_FACTORY);
 
-    private void testInnerJoin()
+    private void testInnerJoin(boolean spillEnabled)
     {
         setup();
 
@@ -111,7 +113,16 @@ public class TestHashJoinOperator
         }
 
         executeLeftDriver();
-        executeRightDriver();
+
+        if(spillEnabled)
+        {
+            executeRightDriverWithSpill();
+        }
+        else
+        {
+            executeRightDriver();
+        }
+
     }
 
     private void createHashBuilderAndLookupJoinOperatorFactory()
@@ -128,7 +139,7 @@ public class TestHashJoinOperator
                 Ints.asList(0),
                 OptionalInt.empty(),
                 Optional.empty(),
-                OptionalInt.of(1),
+                OptionalInt.of(concurrency),
                 PARTITIONING_SPILLER_FACTORY);
 
         hashBuilderOperatorFactory = new HashBuilderOperator.HashBuilderOperatorFactory(
@@ -167,7 +178,8 @@ public class TestHashJoinOperator
                         .collect(toImmutableSet()))
                 .build();
 
-        partitions = GeneratePages.generatePartitions(concurrency);
+        //how many pages in a partition is depended on the pages
+        partitions = GeneratePages.generatePartitions(concurrency,2);
         probePages = GeneratePages.generateProbePages(concurrency);
 
         List<Type> sourceTypes = ImmutableList.<Type>builder()
@@ -215,6 +227,7 @@ public class TestHashJoinOperator
         rightOperators.add(rightValuesOperator);
         rightOperators.add(hashBuilderOperator);
         rightDrivers.add(Driver.createDriver(rightDriverContext, rightOperators));
+        hashBuilderOperators.add(hashBuilderOperator);
     }
 
     public void executeLeftDriver()
@@ -233,20 +246,6 @@ public class TestHashJoinOperator
                 }
             });
         }
-//        for(int i=0;i<concurrency;i++)
-//        {
-//            final int finalI = i;
-//            rightService.execute(()->{
-//                try {
-//                    while (!rightDrivers.get(finalI).isFinished()) {
-//                        rightDrivers.get(finalI).processInternal();
-//                    }
-//                }
-//                catch (Exception e) {
-//                    e.printStackTrace();
-//                }
-//            });
-//        }
     }
 
     private void executeRightDriver()
@@ -266,6 +265,29 @@ public class TestHashJoinOperator
         }
     }
 
+    private void executeRightDriverWithSpill()
+    {
+        LookupSourceFactory lookupSourceFactory = lookupSourceFactoryManager.getJoinBridge(Lifespan.taskWide());
+        Future<LookupSourceProvider> lookupSourceProvider = lookupSourceFactory.createLookupSourceProvider();
+
+        while (!lookupSourceProvider.isDone()) {
+            for(int i=0;i<rightDrivers.size();i++)
+            {
+                rightDrivers.get(i).process();
+                HashBuilderOperator hashBuild=hashBuilderOperators.get(i);
+                if (hashBuild.getOperatorContext().getReservedRevocableBytes() > 0) {
+                    checkState(!lookupSourceProvider.isDone(), "Too late, LookupSource already done");
+                    revokeMemory(hashBuild);
+                }
+            }
+        }
+
+        getFutureValue(lookupSourceProvider).close();
+
+        for (Driver buildDriver : rightDrivers) {
+            runDriverInThread(executor, buildDriver);
+        }
+    }
     private static void runDriverInThread(ExecutorService executor, Driver driver)
     {
         executor.execute(() -> {
@@ -280,6 +302,13 @@ public class TestHashJoinOperator
                 runDriverInThread(executor, driver);
             }
         });
+    }
+
+    private static void revokeMemory(HashBuilderOperator operator)
+    {
+        getFutureValue(operator.startMemoryRevoke());
+        operator.finishMemoryRevoke();
+        checkState(operator.getState() == HashBuilderOperator.State.SPILLING_INPUT || operator.getState() == HashBuilderOperator.State.INPUT_SPILLED);
     }
 
     private static class DummySpillerFactory
@@ -357,7 +386,7 @@ public class TestHashJoinOperator
     public static void main(String[] args)
     {
         TestHashJoinOperator test = new TestHashJoinOperator();
-        test.testInnerJoin();
+        test.testInnerJoin(true);
     }
 
 
