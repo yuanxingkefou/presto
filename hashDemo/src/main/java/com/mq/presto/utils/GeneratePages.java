@@ -98,8 +98,12 @@ public class GeneratePages
         return page;
     }
 
-    public static List<List<Page>> generatePartitions(int concurrency,int pages)
+    public static List<List<Page>> generatePartitions(int concurrency,int buckets,int pages,boolean isBucketed)
     {
+        if(isBucketed)
+        {
+            concurrency*=buckets;
+        }
         List<List<Page>> partitions = new ArrayList<>(concurrency);
         HashGenerator hashGenerator = new InterpretedHashGenerator(ImmutableList.of(BIGINT), new int[] {0});
         PartitionFunction partitionFunction = new LocalPartitionGenerator(hashGenerator, concurrency);
@@ -128,13 +132,82 @@ public class GeneratePages
                     }
 
                     Page pageSplit = new Page(positions.size(), outputBlocks);
-                    System.out.println(partition+(concurrency*num)+":"+pageSplit.toString());
-                    showPage(pageSplit);
                     partitions.get(partition).add(pageSplit);
                 }
             }
         }
-        return partitions;
+        if(isBucketed)
+        {
+            int capacity=concurrency/buckets;
+            int num=0;
+            List<List<Page>> result = new ArrayList<>(capacity);
+
+            for(int i=0;i<capacity;i++)
+            {
+                result.add(new ArrayList<>());
+                for(int j=0;j<buckets;j++)
+                {
+                    result.get(i).addAll(partitions.get(i*buckets+j));
+                }
+            }
+            showPartitions(result);
+            return result;
+        }
+        else {
+            showPartitions(partitions);
+            return partitions;
+        }
+    }
+
+    private static void showPartitions(List<List<Page>> partitions)
+    {
+        for(int i=0;i<partitions.size();i++)
+        {
+            System.out.println("Partition:"+i);
+            for(int j=0;j<partitions.get(i).size();j++)
+            {
+                System.out.println("Page"+j+":");
+                showPage(partitions.get(i).get(j));
+            }
+        }
+    }
+    public static List<List<Page>> generateBuckets(int bucketNum,List<Page> partition)
+    {
+        List<List<Page>> buckets = new ArrayList<>(bucketNum);
+        HashGenerator hashGenerator = new InterpretedHashGenerator(ImmutableList.of(BIGINT), new int[] {0});
+        PartitionFunction bucketFunction = new LocalPartitionGenerator(hashGenerator, bucketNum);
+        IntArrayList[] bucketAssignments = new IntArrayList[bucketNum];
+
+
+        for (int num = 0; num < partition.size(); num++) {
+            Page page = partition.get(num);
+
+            for (int i = 0; i < bucketNum; i++) {
+                bucketAssignments[i] = new IntArrayList();
+                buckets.add(new ArrayList<>());
+            }
+
+            for (int position = 0; position < page.getPositionCount(); position++) {
+                int bucket = bucketFunction.getPartition(page, position);
+                bucketAssignments[bucket].add(position);
+            }
+
+            Block[] outputBlocks = new Block[page.getChannelCount()];
+            for (int bucket = 0; bucket < buckets.size(); bucket++) {
+                IntArrayList positions = bucketAssignments[bucket];
+                if (!positions.isEmpty()) {
+                    for (int i = 0; i < page.getChannelCount(); i++) {
+                        outputBlocks[i] = page.getBlock(i).copyPositions(positions.elements(), 0, positions.size());
+                    }
+
+                    Page pageSplit = new Page(positions.size(), outputBlocks);
+                    System.out.println(bucket+(buckets.size()*num)+":"+pageSplit.toString());
+                    showPage(pageSplit);
+                    buckets.get(bucket).add(pageSplit);
+                }
+            }
+        }
+        return buckets;
     }
 
     public static List<List<Page>> generateProbePages(int concurrency)
@@ -160,6 +233,7 @@ public class GeneratePages
 
     private static void showPage(Page page)
     {
+        System.out.println(page.toString());
         for(int i=0;i<page.getChannelCount();i++)
         {
             System.out.print("Block ");

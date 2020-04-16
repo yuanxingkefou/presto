@@ -71,6 +71,8 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 public class TestHashJoinOperator
 {
     private static int concurrency = 4;
+    private static int buckets=2;
+    private static boolean isBucketed=true;
 
     private ExecutorService executor;
     private ScheduledExecutorService scheduledExecutor;
@@ -144,6 +146,7 @@ public class TestHashJoinOperator
 
         hashBuilderOperatorFactory = new HashBuilderOperator.HashBuilderOperatorFactory(
                 1,
+                concurrency,
                 new PlanNodeId("test"),
                 lookupSourceFactoryManager,
                 ImmutableList.of(0, 1),
@@ -179,7 +182,7 @@ public class TestHashJoinOperator
                 .build();
 
         //how many pages in a partition is depended on the pages
-        partitions = GeneratePages.generatePartitions(concurrency,2);
+        partitions = GeneratePages.generatePartitions(concurrency,buckets,1,isBucketed);
         probePages = GeneratePages.generateProbePages(concurrency);
 
         List<Type> sourceTypes = ImmutableList.<Type>builder()
@@ -187,17 +190,32 @@ public class TestHashJoinOperator
                 .add(BIGINT)
                 .build();
 
-        lookupSourceFactoryManager = JoinBridgeManager.lookupAllAtOnce(new PartitionedLookupSourceFactory(
-                sourceTypes,
-                ImmutableList.of(0, 1).stream()
-                        .map(sourceTypes::get)
-                        .collect(toImmutableList()),
-                Ints.asList(0).stream()
-                        .map(sourceTypes::get)
-                        .collect(toImmutableList()),
-                concurrency,
-                requireNonNull(ImmutableMap.of(), "layout is null"),
-                false));
+        if(isBucketed) {
+            lookupSourceFactoryManager = JoinBridgeManager.lookupAllAtOnce(new PartitionedLookupSourceFactory(
+                    sourceTypes,
+                    ImmutableList.of(0, 1).stream()
+                            .map(sourceTypes::get)
+                            .collect(toImmutableList()),
+                    Ints.asList(0).stream()
+                            .map(sourceTypes::get)
+                            .collect(toImmutableList()),
+                    concurrency*buckets,
+                    requireNonNull(ImmutableMap.of(), "layout is null"),
+                    false));
+        }
+        else{
+            lookupSourceFactoryManager = JoinBridgeManager.lookupAllAtOnce(new PartitionedLookupSourceFactory(
+                    sourceTypes,
+                    ImmutableList.of(0, 1).stream()
+                            .map(sourceTypes::get)
+                            .collect(toImmutableList()),
+                    Ints.asList(0).stream()
+                            .map(sourceTypes::get)
+                            .collect(toImmutableList()),
+                    concurrency,
+                    requireNonNull(ImmutableMap.of(), "layout is null"),
+                    false));
+        }
 
     }
 
@@ -270,14 +288,20 @@ public class TestHashJoinOperator
         LookupSourceFactory lookupSourceFactory = lookupSourceFactoryManager.getJoinBridge(Lifespan.taskWide());
         Future<LookupSourceProvider> lookupSourceProvider = lookupSourceFactory.createLookupSourceProvider();
 
+        int count=0;
         while (!lookupSourceProvider.isDone()) {
             for(int i=0;i<rightDrivers.size();i++)
             {
                 rightDrivers.get(i).process();
                 HashBuilderOperator hashBuild=hashBuilderOperators.get(i);
-                if (hashBuild.getOperatorContext().getReservedRevocableBytes() > 0) {
-                    checkState(!lookupSourceProvider.isDone(), "Too late, LookupSource already done");
-                    revokeMemory(hashBuild);
+                if(count>=concurrency){
+                    continue;
+                }else {
+                    if (hashBuild.getOperatorContext().getReservedRevocableBytes() > 0) {
+                        checkState(!lookupSourceProvider.isDone(), "Too late, LookupSource already done");
+                        revokeMemory(hashBuild);
+                        count++;
+                    }
                 }
             }
         }
@@ -386,7 +410,7 @@ public class TestHashJoinOperator
     public static void main(String[] args)
     {
         TestHashJoinOperator test = new TestHashJoinOperator();
-        test.testInnerJoin(true);
+        test.testInnerJoin(false);
     }
 
 

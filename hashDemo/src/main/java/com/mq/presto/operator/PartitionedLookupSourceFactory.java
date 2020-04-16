@@ -214,7 +214,41 @@ public final class PartitionedLookupSourceFactory
         return partitionsNoLongerNeeded;
     }
 
-    public void setPartitionSpilledLookupSourceHandle(int partitionIndex, com.mq.presto.operator.SpilledLookupSourceHandle spilledLookupSourceHandle)
+    public ListenableFuture<?> lendPartitionLookupSource(int partitionIndex,Supplier<LookupSource>[] partitionLookupSource)
+    {
+        requireNonNull(partitionLookupSource, "partitionLookupSource is null");
+
+        boolean completed;
+
+        lock.writeLock().lock();
+        try {
+            if (destroyed.isDone()) {
+                return immediateFuture(null);
+            }
+            int buckets=partitionLookupSource.length;
+            for(int i=0;i<buckets;i++) {
+                int bucketIndex=partitionIndex*buckets+i;
+                if(partitionLookupSource[i]==null)
+                    continue;
+                checkState(partitions[bucketIndex] == null, "Partition already set");
+                checkState(!spilledPartitions.containsKey(bucketIndex), "Partition already set as spilled");
+                partitions[bucketIndex] = partitionLookupSource[i];
+                partitionsSet++;
+            }
+            completed = (partitionsSet == partitions.length);
+        }
+        finally {
+            lock.writeLock().unlock();
+        }
+
+        if (completed) {
+            supplyLookupSources();
+        }
+
+        return partitionsNoLongerNeeded;
+    }
+
+    public void setPartitionSpilledLookupSourceHandle(int bucketIndex, com.mq.presto.operator.SpilledLookupSourceHandle spilledLookupSourceHandle)
     {
         requireNonNull(spilledLookupSourceHandle, "spilledLookupSourceHandle is null");
 
@@ -227,20 +261,21 @@ public final class PartitionedLookupSourceFactory
                 return;
             }
 
-            checkState(!spilledPartitions.containsKey(partitionIndex), "Partition already set as spilled");
-            spilledPartitions.put(partitionIndex, spilledLookupSourceHandle);
+            checkState(!spilledPartitions.containsKey(bucketIndex), "Partition already set as spilled");
+            spilledPartitions.put(bucketIndex, spilledLookupSourceHandle);
             spillingInfo = new SpillingInfo(spillingInfo.spillEpoch() + 1, spilledPartitions.keySet());
 
-            if (partitions[partitionIndex] != null) {
+            if (partitions[bucketIndex] != null) {
                 // Was present and now it's spilled
                 completed = false;
             }
             else {
                 partitionsSet++;
                 completed = (partitionsSet == partitions.length);
+//                completed = (partitionsSet == concurrency);
             }
 
-            partitions[partitionIndex] = () -> spilledLookupSource;
+            partitions[bucketIndex] = () -> spilledLookupSource;
 
             if (lookupSourceSupplier != null) {
                 /*
